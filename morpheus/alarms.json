@@ -1,0 +1,6 @@
+[
+    {"description":"morning break", "time":"10:45AM","disabled":false},
+    {"description":"lunch break", "time":"12:45PM","disabled":false},
+    {"description":"afternoon break", "time":"3:50PM","disabled":false},
+    {"description":"end of the day", "time":"5:00PM","disabled":false}
+]

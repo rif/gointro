@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -12,31 +11,42 @@ import (
 )
 
 var (
-	conf = flag.String("conf", "~/.alarms.json", "alarms configuration file path")
+	conf = flag.String("conf", "alarms.json", "alarms configuration file path")
 )
 
 func main() {
 	flag.Parse()
-	alarms, err := engine.LoadAlarms(*conf)
-	if err != nil {
+	alarms := engine.NewAlarms()
+	if err := alarms.LoadAlarms(*conf); err != nil {
 		log.Fatal(err)
 	}
 
-	go alarms.Watch()
+	go alarms.Wait()
 
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
 
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		sig := <-sigs
-		fmt.Println()
-		fmt.Println(sig)
-		done <- true
+		for {
+			switch sig := <-sigs; sig {
+			case syscall.SIGINT, syscall.SIGTERM:
+				log.Printf("%v received: terminating!", sig)
+				alarms.StopWaiting()
+				done <- true
+			case syscall.SIGHUP:
+				log.Printf("%v received: reloading!", sig)
+				alarms.StopWaiting()
+				if err := alarms.LoadAlarms(*conf); err != nil {
+					log.Fatal(err)
+				}
+				go alarms.Wait()
+			}
+		}
 	}()
 
-	fmt.Println("awaiting signal")
+	log.Print("awaiting signal")
 	<-done
-	fmt.Println("exiting")
+	log.Print("exiting")
 }

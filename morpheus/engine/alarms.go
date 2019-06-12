@@ -4,28 +4,35 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"log"
+	"os/exec"
 	"sort"
 	"sync"
 	"time"
 )
 
 type Alarms struct {
-	alarms       []*Alarm
-	stopWatching chan bool
+	alarms      []*Alarm
+	stopWaiting chan bool
 	sync.RWMutex
 }
 
-func LoadAlarms(fn string) (*Alarms, error) {
+func NewAlarms() *Alarms {
+	return &Alarms{
+		stopWaiting: make(chan bool),
+	}
+}
+
+func (a *Alarms) LoadAlarms(fn string) error {
 	// read all content of the file
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	alarms := &Alarms{}
-	if err := alarms.load(data); err != nil {
-		return nil, err
+
+	if err := a.load(data); err != nil {
+		return err
 	}
-	return alarms, nil
+	return nil
 }
 
 // load parses json data into a slice
@@ -41,40 +48,66 @@ func (a *Alarms) load(jsonData []byte) error {
 	}
 	// sort alarms by parsed time in place
 	sort.Slice(alarms, func(i, j int) bool { return !alarms[i].parsedTime.After(alarms[j].parsedTime) })
+	for _, a := range alarms {
+		log.Printf("loaded alarm %s at %v", a.Description, a.parsedTime)
+	}
 	a.Lock()
 	a.alarms = alarms
 	a.Unlock()
 	return nil
 }
-func (a *Alarms) tomorrow() {
+
+func (a *Alarms) shiftOneDay() {
 	a.Lock()
 	defer a.Unlock()
+	log.Print("shifting one day")
 	for _, alarm := range a.alarms {
-		alarm.parsedTime.AddDate(0, 0, 1)
+		alarm.parsedTime = alarm.parsedTime.AddDate(0, 0, 1)
 	}
 }
 
-func (a *Alarms) Watch() {
+func (a *Alarms) StopWaiting() {
+	a.stopWaiting <- true
+}
+
+func (a *Alarms) Wait() {
 	now := time.Now()
 	a.RLock()
-	alarms := make([]*Alarm, 0, len(a.alarms))
+	alarms := make([]*Alarm, len(a.alarms))
 	copy(alarms, a.alarms)
 	a.RUnlock()
-	watchingWasStopped := false
-	for !watchingWasStopped {
+	waitingWasStopped := false
+	for !waitingWasStopped {
 		for _, alarm := range alarms {
+			if waitingWasStopped {
+				break
+			}
 			if now.After(alarm.parsedTime) {
 				continue
 			}
+			nextAlarmDuration := time.Until(alarm.parsedTime)
+
+			log.Print("next alarm in: ", nextAlarmDuration)
 
 			select {
-			case <-a.stopWatching:
-				watchingWasStopped = true
-				break
-			case <-time.After(time.Until(alarm.parsedTime)):
-				log.Print("Allarm triggered!")
+			case <-a.stopWaiting:
+				log.Print("abort waiting")
+				waitingWasStopped = true
+			case <-time.After(nextAlarmDuration):
+				log.Print("Alarm triggered!")
+				cmd := exec.Command("notify-send", "morpheus", alarm.Description, "-i", "/usr/share/icons/hicolor/64x64/apps/firefox.png")
+				err := cmd.Start()
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 		}
-		a.tomorrow()
+		if !waitingWasStopped {
+			a.shiftOneDay()
+			a.RLock()
+			copy(alarms, a.alarms)
+			a.RUnlock()
+		}
 	}
+	log.Print("wait finished")
 }
