@@ -2,24 +2,28 @@ package school
 
 import "testing"
 
-func TestUniqueNil(t *testing.T) {
+/*func TestUniqueNil(t *testing.T) {
 	var s []string
 	u := Unique(s)
 	if u != 0 {
 		t.Error("got elements for an empty slice: ", u)
 	}
-}
+}*/
 
 func TestUniqueNoDuplicates(t *testing.T) {
-	s := []Student{
-		{LastName: "Doe"},
+	s := Students{
+		&Student{LastName: "Doe"},
+		&Student{LastName: "Smith"},
+		&Student{LastName: "Jhonson"},
 	}
-	u := Unique(s)
+	//_ = make(Students, 0)
+	u := s.Unique()
 	if u != 3 {
 		t.Error("expected 3 got ", u)
 	}
 }
 
+/*
 func TestUniqueDuplicates(t *testing.T) {
 	s := []string{"car", "house", "car", "car", "pen", "pen"}
 	u := Unique(s)
@@ -34,3 +38,4 @@ func BenchmarkUniquenes(b *testing.B) {
 		Unique(s)
 	}
 }
+*/

@@ -16,7 +16,7 @@ func (s Students) Average() float64 {
 	if len(s) == 0 {
 		return 0
 	}
-	sum := 0
+	sum := 0.0
 	for _, v := range s {
 		a, err := v.GradeAverage()
 		if err != nil {
